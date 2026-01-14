@@ -1,156 +1,180 @@
 /**
- * LocalStorage Service
+ * Supabase Storage Service
  * 
- * Manages data persistence using browser's localStorage.
- * Designed to be easily swapped with Firebase/Supabase in the future.
- * 
- * Migration Notes:
- * - Replace localStorage calls with database queries
- * - Add user authentication and filter by userId
- * - Implement real-time subscriptions for multi-device sync
+ * Manages book data using Supabase backend.
+ * Each user has their own private collection.
  */
 
-const STORAGE_KEY = 'bookshelf_books';
+import { supabase } from './supabase-client';
 
-/**
- * Get all books from localStorage
- * 
- * @returns {Array<Book>} Array of book objects
- */
-export function getAllBooks() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    
-    const books = JSON.parse(stored);
-    return Array.isArray(books) ? books : [];
-  } catch (error) {
-    console.error('Error loading books from localStorage:', error);
-    return [];
-  }
-}
-
-/**
- * Save all books to localStorage
- * 
- * @param {Array<Book>} books - Array of book objects
- * @returns {boolean} Success status
- */
-export function saveBooks(books) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(books));
-    return true;
-  } catch (error) {
-    console.error('Error saving books to localStorage:', error);
-    return false;
-  }
-}
-
-/**
- * Add a new book
- * 
- * @param {Book} book - Book object to add
- * @returns {Book} The added book
- */
-export function addBook(book) {
-  const books = getAllBooks();
-  books.push(book);
-  saveBooks(books);
-  return book;
-}
-
-/**
- * Update an existing book
- * 
- * @param {string} bookId - ID of the book to update
- * @param {Partial<Book>} updates - Fields to update
- * @returns {Book|null} Updated book or null if not found
- */
-export function updateBook(bookId, updates) {
-  const books = getAllBooks();
-  const index = books.findIndex(b => b.id === bookId);
-  
-  if (index === -1) return null;
-  
-  books[index] = {
-    ...books[index],
-    ...updates,
-    updatedAt: Date.now(),
+// Convert camelCase to snake_case for database
+function toSnakeCase(obj) {
+  const result = {
+    title: obj.title,
+    author: obj.author,
+    cover_url: obj.coverUrl || obj.cover_url || '',
+    status: obj.status,
+    rating: obj.rating,
+    review: obj.review || '',
+    finished_at: obj.finishedAt || obj.finished_at || null,
   };
   
-  saveBooks(books);
-  return books[index];
+  if (obj.id) {
+    result.id = obj.id;
+  }
+  
+  return result;
 }
 
-/**
- * Delete a book
- * 
- * @param {string} bookId - ID of the book to delete
- * @returns {boolean} Success status
- */
-export function deleteBook(bookId) {
-  const books = getAllBooks();
-  const filtered = books.filter(b => b.id !== bookId);
+// Convert snake_case to camelCase for app
+function toCamelCase(obj) {
+  return {
+    id: obj.id,
+    title: obj.title,
+    author: obj.author,
+    coverUrl: obj.cover_url || '',
+    status: obj.status,
+    rating: obj.rating,
+    review: obj.review || '',
+    createdAt: obj.created_at,
+    updatedAt: obj.updated_at,
+    finishedAt: obj.finished_at,
+  };
+}
+
+export async function getAllBooks() {
+  const { data: { user } } = await supabase.auth.getUser();
   
-  if (filtered.length === books.length) return false;
+  if (!user) {
+    console.error('No authenticated user');
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('books')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching books:', error);
+    return [];
+  }
+
+  return data.map(toCamelCase);
+}
+
+export async function addBook(book) {
+  const { data: { user } } = await supabase.auth.getUser();
   
-  saveBooks(filtered);
+  if (!user) {
+    throw new Error('No authenticated user');
+  }
+  
+  const bookData = {
+    ...toSnakeCase(book),
+    user_id: user.id,
+  };
+
+  const { data, error } = await supabase
+    .from('books')
+    .insert([bookData])
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error adding book:', error);
+    throw error;
+  }
+
+  return toCamelCase(data);
+}
+
+export async function updateBook(bookId, updates) {
+  const updateData = toSnakeCase(updates);
+  
+  const { data, error } = await supabase
+    .from('books')
+    .update(updateData)
+    .eq('id', bookId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating book:', error);
+    throw error;
+  }
+
+  return toCamelCase(data);
+}
+
+export async function deleteBook(bookId) {
+  const { error } = await supabase
+    .from('books')
+    .delete()
+    .eq('id', bookId);
+
+  if (error) {
+    console.error('Error deleting book:', error);
+    return false;
+  }
+
   return true;
 }
 
-/**
- * Get books by reading status
- * 
- * @param {string} status - Reading status to filter by
- * @returns {Array<Book>} Filtered array of books
- */
-export function getBooksByStatus(status) {
-  const books = getAllBooks();
-  return books.filter(b => b.status === status);
+export async function getBooksByStatus(status) {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('books')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('status', status)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching books:', error);
+    return [];
+  }
+
+  return data.map(toCamelCase);
 }
 
-/**
- * Clear all books (useful for testing or reset)
- * 
- * @returns {boolean} Success status
- */
+export function subscribeToBooks(callback) {
+  const channel = supabase
+    .channel('books_changes')
+    .on('postgres_changes', 
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'books' 
+      }, 
+      (payload) => {
+        callback(payload);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export function clearAllBooks() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    return true;
-  } catch (error) {
-    console.error('Error clearing books:', error);
-    return false;
-  }
+  console.warn('clearAllBooks not implemented for Supabase');
+  return false;
 }
 
-/**
- * Export books as JSON (for backup or migration)
- * 
- * @returns {string} JSON string of all books
- */
 export function exportBooks() {
-  const books = getAllBooks();
-  return JSON.stringify(books, null, 2);
+  console.warn('exportBooks not implemented for Supabase');
+  return '[]';
 }
 
-/**
- * Import books from JSON (for backup restore or migration)
- * 
- * @param {string} jsonString - JSON string of books
- * @returns {boolean} Success status
- */
 export function importBooks(jsonString) {
-  try {
-    const books = JSON.parse(jsonString);
-    if (!Array.isArray(books)) {
-      throw new Error('Invalid format: expected array of books');
-    }
-    
-    saveBooks(books);
-    return true;
-  } catch (error) {
-    console.error('Error importing books:', error);
-    return false;
-  }
+  console.warn('importBooks not implemented for Supabase');
+  return false;
 }
