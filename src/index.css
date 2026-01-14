@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global Styles */
+@layer base {
+  body {
+    @apply bg-cream font-sans text-wood-darker antialiased;
+  }
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bookAppear {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Utility classes */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-book-appear {
+    animation: bookAppear 0.5s ease-out backwards;
+  }
+  
+  /* Wood grain texture using CSS gradients */
+  .wood-texture {
+    background: 
+      linear-gradient(90deg, 
+        rgba(0, 0, 0, 0.05) 0%,
+        transparent 10%,
+        transparent 20%,
+        rgba(0, 0, 0, 0.03) 30%,
+        transparent 40%,
+        transparent 60%,
+        rgba(0, 0, 0, 0.04) 70%,
+        transparent 80%,
+        transparent 90%,
+        rgba(0, 0, 0, 0.05) 100%
+      ),
+      linear-gradient(0deg,
+        #8B6F47 0%,
+        #9d7d52 50%,
+        #8B6F47 100%
+      );
+  }
+  
+  /* Scrollbar styling for cozy theme */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  /* Custom scrollbar for desktop */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-cream-dark rounded-full;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-wood rounded-full;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-wood-dark;
+  }
+}
+
+/* Book spine effect */
+.book-spine {
+  position: relative;
+}
+
+.book-spine::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  background: linear-gradient(to right, rgba(0, 0, 0, 0.2), transparent);
+  border-radius: 4px 0 0 4px;
+}
